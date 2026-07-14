@@ -48,6 +48,7 @@ export default function HargaJatimPage() {
   const [globalPrices, setGlobalPrices] = useState<DashboardHargaBulanan[]>([])
   const [selectedYear, setSelectedYear] = useState<string>("2026")
   const [years, setYears] = useState<number[]>([2026, 2025, 2024, 2023, 2022])
+  const [selectedMonth, setSelectedMonth] = useState<string>("")
   const [loading, setLoading] = useState(true)
 
   // ─── 1. EFFECT: Mengambil Data Tren Jangka Panjang (Hanya Sekali di Awal) ───
@@ -117,27 +118,39 @@ export default function HargaJatimPage() {
     fetchByYear()
   }, [selectedYear])
 
-  // Menghilangkan fungsi filter selectedYearRows karena data allPrices sudah murni terfilter dari server
+  // Data sudah murni terfilter dari server berdasarkan tahun
   const selectedYearRows = allPrices;
 
-  // Get the latest month available in the selected year that has data
-  const latestMonthInfo = useMemo(() => {
-    if (selectedYearRows.length === 0) return { month: 0, name: "" }
+  // Daftar bulan yang tersedia dalam tahun terpilih (hanya bulan yang ada datanya)
+  const availableMonths = useMemo(() => {
     const valid = selectedYearRows.filter(r => r.harga_bulanan !== null)
-    if (valid.length === 0) return { month: 0, name: "" }
-    const maxMonth = Math.max(...valid.map(r => r.bulan))
-    const sample = valid.find(r => r.bulan === maxMonth)
-    return {
-      month: maxMonth,
-      name: sample ? sample.nama_bulan : ""
-    }
+    const monthMap = new Map<number, string>()
+    valid.forEach(r => {
+      if (!monthMap.has(r.bulan)) monthMap.set(r.bulan, r.nama_bulan)
+    })
+    return Array.from(monthMap.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([bulan, nama_bulan]) => ({ bulan, nama_bulan }))
   }, [selectedYearRows])
 
-  // Get records of the latest month of the selected year
+  // Auto-set ke bulan terbaru setiap kali availableMonths berubah (tahun berganti atau data baru masuk)
+  useEffect(() => {
+    if (availableMonths.length === 0) return
+    const latest = availableMonths[availableMonths.length - 1]
+    setSelectedMonth(String(latest.bulan))
+  }, [availableMonths])
+
+  // Informasi bulan yang sedang aktif (untuk label KPI)
+  const activeMonthInfo = useMemo(() => {
+    const found = availableMonths.find(m => String(m.bulan) === selectedMonth)
+    return found ?? { bulan: 0, nama_bulan: "" }
+  }, [availableMonths, selectedMonth])
+
+  // Baris data untuk bulan yang dipilih
   const latestMonthRows = useMemo(() => {
-    if (selectedYearRows.length === 0 || latestMonthInfo.month === 0) return []
-    return selectedYearRows.filter(r => r.bulan === latestMonthInfo.month && r.harga_bulanan !== null)
-  }, [selectedYearRows, latestMonthInfo])
+    if (!selectedMonth) return []
+    return selectedYearRows.filter(r => r.bulan === Number(selectedMonth) && r.harga_bulanan !== null)
+  }, [selectedYearRows, selectedMonth])
 
   // Calculate 4 KPI metrics dynamically
   const cardsData = useMemo(() => {
@@ -249,16 +262,31 @@ const top5Data = useMemo(() => {
                 </div>
               </div>
 
-              <Select value={selectedYear} onValueChange={setSelectedYear} disabled={years.length === 0}>
-                <SelectTrigger className="h-9 w-36 text-xs bg-white border-slate-200 font-semibold shadow-sm focus:ring-[#2E7D32] rounded-lg">
-                  <SelectValue placeholder="Pilih Tahun…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {years.map((y) => (
-                    <SelectItem key={y} value={String(y)} className="text-xs font-medium">{y}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                <Select value={selectedMonth} onValueChange={setSelectedMonth} disabled={availableMonths.length === 0}>
+                  <SelectTrigger className="h-9 w-36 text-xs bg-white border-slate-200 font-semibold shadow-sm focus:ring-[#2E7D32] rounded-lg">
+                    <SelectValue placeholder="Pilih Bulan…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableMonths.map((m) => (
+                      <SelectItem key={m.bulan} value={String(m.bulan)} className="text-xs font-medium">
+                        {m.nama_bulan}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={selectedYear} onValueChange={setSelectedYear} disabled={years.length === 0}>
+                  <SelectTrigger className="h-9 w-36 text-xs bg-white border-slate-200 font-semibold shadow-sm focus:ring-[#2E7D32] rounded-lg">
+                    <SelectValue placeholder="Pilih Tahun…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {years.map((y) => (
+                      <SelectItem key={y} value={String(y)} className="text-xs font-medium">{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* LEVEL 1 — KPI CARDS */}
@@ -272,7 +300,7 @@ const top5Data = useMemo(() => {
                   <KpiCard
                     title="Rata-rata Provinsi"
                     value={cardsData ? formatRupiah(cardsData.rata_rata_provinsi) : "—"}
-                    sub={latestMonthInfo.name ? `Periode ${latestMonthInfo.name} ${selectedYear}` : "Rata-rata harga se-Jatim"}
+                    sub={activeMonthInfo.nama_bulan ? `Periode ${activeMonthInfo.nama_bulan} ${selectedYear}` : "Rata-rata harga se-Jatim"}
                     icon={<Coins className="size-5" />}
                     variant="lime"
                   />
