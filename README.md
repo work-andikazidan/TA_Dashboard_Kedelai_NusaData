@@ -59,6 +59,7 @@ Buat file `.env.local` di root direktori dan sesuaikan kredensial Supabase Anda:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token
 ```
 
 ### 4. Menjalankan Server Pengembangan
@@ -98,33 +99,3 @@ npm run start
 ```
 
 ---
-
-## ⚠️ Catatan Penting & Optimasi Query (Supabase Limit)
-
-Secara default, Supabase membatasi hasil query API maksimal **1.000 baris** per request untuk mencegah penggunaan resource yang berlebihan. 
-
-Pada data historis bulanan kabupaten/kota, jumlah baris dengan cepat melebihi 1.000 baris (38 wilayah × 12 bulan = 456 baris per tahun). Oleh karena itu, pengambilan data global/tren jangka panjang di dashboard ini telah dioptimalkan menggunakan **Range-based Pagination** untuk mengambil data secara bertahap hingga tuntas:
-
-```typescript
-// Contoh implementasi bypass limit 1.000 baris:
-const PAGE_SIZE = 1000
-let allData = []
-let from = 0
-let hasMore = true
-
-while (hasMore) {
-  const { data, error } = await supabase
-    .from("nama_tabel")
-    .select("*")
-    .range(from, from + PAGE_SIZE - 1)
-  
-  if (data) {
-    allData = allData.concat(data)
-    from += PAGE_SIZE
-    hasMore = data.length === PAGE_SIZE
-  } else {
-    hasMore = false
-  }
-}
-```
-Pastikan untuk menerapkan metode di atas jika Anda menambahkan query data berskala besar lainnya di masa mendatang.
